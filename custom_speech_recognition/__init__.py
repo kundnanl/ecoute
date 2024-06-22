@@ -110,9 +110,6 @@ class Microphone(AudioSource):
             import pyaudiowpatch as pyaudio
         except ImportError:
             raise AttributeError("Could not find PyAudio; check installation")
-        from distutils.version import LooseVersion
-        if LooseVersion(pyaudio.__version__) < LooseVersion("0.2.11"):
-            raise AttributeError("PyAudio 0.2.11 or later is required (found version {})".format(pyaudio.__version__))
         return pyaudio
 
     @staticmethod
@@ -353,6 +350,8 @@ class Recognizer(AudioSource):
 
         self.phrase_threshold = 0.3  # minimum seconds of speaking audio before we consider the speaking audio a phrase - values below this are ignored (for filtering out clicks and pops)
         self.non_speaking_duration = 0.5  # seconds of non-speaking audio to keep on both sides of the recording
+        
+        self.stop_listening_event = threading.Event()  # Event to signal stopping the background listening thread
 
     def record(self, source, duration=None, offset=None):
         """
@@ -559,6 +558,12 @@ class Recognizer(AudioSource):
         frame_data = b"".join(frames)
 
         return AudioData(frame_data, source.SAMPLE_RATE, source.SAMPLE_WIDTH)
+    
+    def stop_listening(self):
+        """
+        Stops the background listening thread if it's running.
+        """
+        self.stop_listening_event.set()  # Set the event to signal the background thread to stop
 
     def listen_in_background(self, source, callback, phrase_time_limit=None):
         """
@@ -575,7 +580,7 @@ class Recognizer(AudioSource):
 
         def threaded_listen():
             with source as s:
-                while running[0]:
+                while running[0] and not self.stop_listening_event.is_set():  # Check if stop event is set
                     try:  # listen for 1 second, then check again if the stop function has been called
                         audio = self.listen(s, 1, phrase_time_limit)
                     except WaitTimeoutError:  # listening timed out, just try again
@@ -585,6 +590,7 @@ class Recognizer(AudioSource):
 
         def stopper(wait_for_stop=True):
             running[0] = False
+            self.stop_listening_event.set()  # Set the stop event to ensure the background thread stops
             if wait_for_stop:
                 listener_thread.join()  # block until the background thread is done, which can take around 1 second
 
@@ -592,6 +598,7 @@ class Recognizer(AudioSource):
         listener_thread.daemon = True
         listener_thread.start()
         return stopper
+    
 
     def recognize_sphinx(self, audio_data, language="en-US", keyword_entries=None, grammar=None, show_all=False):
         """

@@ -10,17 +10,23 @@ import sys
 import TranscriberModels
 import subprocess
 
+transcription_running = True
+
 def write_in_textbox(textbox, text):
     textbox.delete("0.0", "end")
     textbox.insert("0.0", text)
 
 def update_transcript_UI(transcriber, textbox):
-    transcript_string = transcriber.get_transcript()
-    write_in_textbox(textbox, transcript_string)
-    textbox.after(300, update_transcript_UI, transcriber, textbox)
+    if transcription_running:
+        transcript_string = transcriber.get_transcript()
+        write_in_textbox(textbox, transcript_string)
+        textbox.after(300, update_transcript_UI, transcriber, textbox)
+    else:
+        # If transcription is stopped, don't update the UI
+        pass
 
 def update_response_UI(responder, textbox, update_interval_slider_label, update_interval_slider, freeze_state):
-    if not freeze_state[0]:
+    if not freeze_state[0] and transcription_running:
         response = responder.response
 
         textbox.configure(state="normal")
@@ -53,7 +59,7 @@ def create_ui_components(root):
     response_textbox = ctk.CTkTextbox(root, width=300, font=("Arial", font_size), text_color='#639cdc', wrap="word")
     response_textbox.grid(row=0, column=1, padx=10, pady=20, sticky="nsew")
 
-    freeze_button = ctk.CTkButton(root, text="Freeze", command=None)
+    freeze_button = ctk.CTkButton(root, text="Stop", command=None)
     freeze_button.grid(row=1, column=1, padx=10, pady=3, sticky="nsew")
 
     update_interval_slider_label = ctk.CTkLabel(root, text=f"", font=("Arial", 12), text_color="#FFFCF2")
@@ -112,10 +118,13 @@ def main():
 
     freeze_state = [False]  # Using list to be able to change its content inside inner functions
     def freeze_unfreeze():
-        freeze_state[0] = not freeze_state[0]  # Invert the freeze state
-        freeze_button.configure(text="Unfreeze" if freeze_state[0] else "Freeze")
-
-    freeze_button.configure(command=freeze_unfreeze)
+        global transcription_running
+        transcription_running = not transcription_running
+        if transcription_running:
+            freeze_button.configure(text="Stop")
+        else:
+            freeze_button.configure(text="Start")
+        freeze_button.configure(command=freeze_unfreeze)
 
     update_interval_slider_label.configure(text=f"Update interval: {update_interval_slider.get()} seconds")
 

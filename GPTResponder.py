@@ -17,7 +17,7 @@ def generate_response_from_transcript(transcript):
         return ''
     full_response = response.choices[0].message.content
     try:
-        return full_response.split('[')[1].split(']')[0]
+        return full_response
     except:
         return ''
     
